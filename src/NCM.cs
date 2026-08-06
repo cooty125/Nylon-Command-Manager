@@ -170,7 +170,7 @@ internal static class NCM
 
     static readonly Dictionary<string, ICOMMAND> commands = new Dictionary<string, ICOMMAND>( StringComparer.OrdinalIgnoreCase );
     static readonly Dictionary<string, List<string>> aliasMap = new( StringComparer.OrdinalIgnoreCase );
-    static Queue<Action> commandQueue = new( );
+    static readonly ConcurrentQueue<Action> commandQueue = new( );
 
     public static int QueueCount => commandQueue.Count;
 
