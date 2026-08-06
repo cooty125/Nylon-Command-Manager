@@ -366,7 +366,7 @@ internal static class UI
                 var cmdName = $"{prefix}{(string.IsNullOrEmpty( prefix ) ? "" : "_")}{control.Name}_{eventName}";
 
                 if ( !NCM.Exists( cmdName ) ) {
-                    NCM.Register( new CMD_UIAction( cmdName, ( args ) => { } ) );
+                    NCM.Register( new CMD_UIGeneric( cmdName, ( args ) => { } ) );
                 }
 
                 Bind( control, eventName, cmdName );
@@ -466,7 +466,7 @@ internal class UIActionArgs {
         return parameters.ContainsKey( key );
     }
 }
-internal class CMD_UIAction : COMMAND<UIActionArgs>
+internal class CMD_UIGeneric : COMMAND<UIActionArgs>
 {
     readonly Action<UIActionArgs> uiAction;
 
@@ -474,7 +474,7 @@ internal class CMD_UIAction : COMMAND<UIActionArgs>
     public override string Description => $"UI Action: {Name}";
     public override string Category => "UI";
 
-    public CMD_UIAction( string name, Action<UIActionArgs> action ) {
+    public CMD_UIGeneric( string name, Action<UIActionArgs> action ) {
         Name = name;
         uiAction = action;
     }
