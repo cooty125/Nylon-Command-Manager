@@ -337,8 +337,11 @@ internal static class NCM
     // ProcessQueue
     //
     internal static void ProcessQueue( ) {
-        while ( commandQueue.Count > 0 ) {
-            var action = commandQueue.Dequeue( );
+        if ( commandQueue.IsEmpty ) {
+            return;
+        }
+
+        while ( commandQueue.TryDequeue( out var action ) ) {
             action( );
         }
     }
