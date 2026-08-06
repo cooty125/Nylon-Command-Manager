@@ -176,7 +176,7 @@ internal class CMD_SelectAsset : COMMAND<UIActionArgs>
 
 ```csharp
 // Register a command with custom action
-NCM.Register(new CMD_UIAction("MyAction", (args) =>
+NCM.Register(new CMD_UIGeneric("MyAction", (args) =>
 {
     var sender = args.Sender;
     var eventArgs = args.EventArgs;
