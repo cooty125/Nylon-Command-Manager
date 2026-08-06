@@ -474,9 +474,9 @@ internal class CMD_UIGeneric : COMMAND<UIActionArgs>
     public override string Description => $"UI Action: {Name}";
     public override string Category => "UI";
 
-    public CMD_UIGeneric( string name, Action<UIActionArgs> action ) {
+    public CMD_UIGeneric( string name, Action<UIActionArgs> action = null! ) {
         Name = name;
-        uiAction = action;
+        uiAction = ( action ?? (( args ) => { }) );
     }
 
     public override void Execute( UIActionArgs arguments ) {
