@@ -9,7 +9,6 @@ NCM is a lightweight, powerful command manager that brings Source Engine-style c
 ## ✨ Features
 
 - 🔌 **Command Registry** – Register commands with names, aliases, and categories
-- 🎯 **Typed Arguments** – Commands with strongly-typed arguments, supporting both classes and anonymous objects
 - 🏷️ **Attributes** – Define commands with `[COMMAND]` attribute for automatic registration
 - 🔄 **Automatic UI Binding** – Bind any WinForms event to commands with a single line of code
 - 🏷️ **Aliases** – Multiple names for the same command (e.g., `Build`, `b`, `make`)
@@ -17,6 +16,7 @@ NCM is a lightweight, powerful command manager that brings Source Engine-style c
 - 🔍 **Case-Insensitive** – `Build` and `build` are the same command
 - 🧩 **Service Registry** – Built-in DI container for services
 - 📦 **Command Queue** – Optional async command queue for game loops and batching
+- 🎯 **Smart Argument Conversion** – Commands can accept any parameter type (string, int, Button, EventArgs, etc.)
 
 ---
 
@@ -26,15 +26,14 @@ NCM is a lightweight, powerful command manager that brings Source Engine-style c
 
 ```csharp
 [COMMAND("change_text", "Changes text in textBox1", "UI Test", "ct")]
-private static void ChangeTextCommand(object args)
+private static void ChangeTextCommand(EventArgs args)
 {
     var form = UI.Form as Form1;
     if (form == null) return;
 
-    if (args is UIActionArgs uiArgs && uiArgs.Sender is Button btn)
-    {
-        form.textBox1.Text = $"Hello from {btn.Text}!";
-    }
+    // Get the button from the event args (if needed)
+    // Or use the sender via UI.Form
+    form.textBox1.Text = "Hello from NCM!";
 }
 ```
 
@@ -48,9 +47,6 @@ public Form1()
     
     // Automatically registers all [COMMAND] methods
     NCM.RegisterAttributes();
-    
-    // Automatic binding of all buttons
-    UI.BindAllButtons();
 }
 ```
 
@@ -58,10 +54,10 @@ public Form1()
 
 ```csharp
 // From anywhere
-NCM.Execute("change_text", new UIActionArgs { Sender = btn, EventArgs = e });
+NCM.Execute("change_text", eventArgs);
 
 // With alias
-NCM.Execute("ct", new UIActionArgs { Sender = btn, EventArgs = e });
+NCM.Execute("ct", eventArgs);
 
 // Without arguments
 NCM.Execute("Build");
@@ -85,44 +81,22 @@ public Form1()
     // Or manually
     btnBuild.Click += (s, e) =>
     {
-        NCM.Execute("Build", new UIActionArgs { Sender = s, EventArgs = e });
+        NCM.Execute("Build", e); // e is EventArgs
     };
 }
-```
-
-### Manual binding
-
-```csharp
-// Bind a single control
-UI.Bind(btnBuild, "Click", "Build");
 ```
 
 ### Access UI from commands
 
 ```csharp
 [COMMAND("set_status", "Sets status bar text", "UI")]
-private static void StatusCommand(object args)
+private static void StatusCommand(EventArgs args)
 {
     var form = UI.Form as MainForm;
     if (form == null) return;
 
-    if (args is UIActionArgs uiArgs)
-    {
-        form.statusLabel.Text = "Hello!";
-    }
+    form.statusLabel.Text = "Clicked!";
 }
-```
-
-### Custom UI command with action
-
-```csharp
-// Register a command with custom action
-NCM.Register(new CMD_UIGeneric("MyAction", (args) =>
-{
-    var sender = args.Sender;
-    var eventArgs = args.EventArgs;
-    // Do something...
-}));
 ```
 
 ## 📦 Services (Dependency Injection)
@@ -134,7 +108,7 @@ SERVICES.Register(new BuildService());
 
 // Use them in commands
 [COMMAND("build", "Builds all assets", "Pipeline", "b")]
-private static void BuildCommand(object args)
+private static void BuildCommand()
 {
     var pipeline = SERVICES.Get<AssetPipeline>();
     var build = SERVICES.Get<BuildService>();
@@ -144,6 +118,31 @@ private static void BuildCommand(object args)
 ```
 
 ---
+
+## 🎯 Smart Argument Conversion
+Commands can accept any parameter type. NCM automatically converts the argument to the expected type.
+
+```csharp
+// No parameter
+[COMMAND("build")]
+private static void BuildCommand() { }
+
+// String parameter (from console)
+[COMMAND("echo")]
+private static void EchoCommand(string text) { }
+
+// EventArgs parameter (from UI)
+[COMMAND("change_text")]
+private static void ChangeTextCommand(EventArgs args) { }
+
+// TreeViewEventArgs parameter (from TreeView)
+[COMMAND("tree_select")]
+private static void SelectAssetCommand(TreeViewEventArgs args) { }
+
+// Integer parameter
+[COMMAND("set_value")]
+private static void SetValueCommand(int value) { }
+```
 
 ## 🔧 Command Queue (Async / Game Loop)
 
@@ -184,7 +183,7 @@ Application.Idle += (s, e) => NCM.ProcessQueue();
 ```csharp
 // System commands
 [COMMAND("help", "Shows all available commands", "System")]
-private static void HelpCommand(object args)
+private static void HelpCommand()
 {
     var sb = new StringBuilder();
     sb.AppendLine("Available commands:");
@@ -202,15 +201,33 @@ private static void HelpCommand(object args)
 }
 
 [COMMAND("clear", "Clears the console", "System")]
-private static void ClearCommand(object args)
+private static void ClearCommand()
 {
     Console.Clear();
 }
 
 [COMMAND("exit", "Exits the application", "System")]
-private static void ExitCommand(object args)
+private static void ExitCommand()
 {
     Application.Exit();
+}
+
+// UI commands
+[COMMAND("change_text", "Changes text in textBox1", "UI Test", "ct")]
+private static void ChangeTextCommand(EventArgs args)
+{
+    var form = UI.Form as Form1;
+    if (form == null) return;
+
+    form.textBox1.Text = "Hello from NCM!";
+}
+
+// TreeView command (receives TreeViewEventArgs directly)
+[COMMAND("tree_select", "Selects a node in the tree", "UI")]
+private static void SelectAssetCommand(TreeViewEventArgs args)
+{
+    var node = args.Node;
+    Console.WriteLine($"Selected: {node.Text}");
 }
 ```
 
