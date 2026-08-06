@@ -28,8 +28,7 @@ NCM is a lightweight, powerful command manager that brings Source Engine-style c
 [COMMAND("change_text", "Changes text in textBox1", "UI Test", "ct")]
 private static void ChangeTextCommand(EventArgs args)
 {
-    var form = UI.Form as Form1;
-    if (form == null) return;
+    var form = UI.GetForm<Form1>( );
 
     // Get the button from the event args (if needed)
     // Or use the sender via UI.Form
