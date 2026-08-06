@@ -134,6 +134,9 @@ internal static class NCM
 
     static readonly Dictionary<string, ICOMMAND> commands = new Dictionary<string, ICOMMAND>( StringComparer.OrdinalIgnoreCase );
     static readonly Dictionary<string, List<string>> aliasMap = new( );
+    static Queue<Action> commandQueue = new( );
+
+    public static int QueueCount => commandQueue.Count;
 
     //
     // Register
@@ -202,7 +205,7 @@ internal static class NCM
                 }
 
                 var action = ( Action<object> )Delegate.CreateDelegate( typeof( Action<object> ), method );
-                var command = new CMD_Generic( attr.Name, action, attr.Description, attr.Category );
+                var command = new CMD( attr.Name, action, attr.Description, attr.Category );
 
                 foreach ( var alias in attr.Aliases ) {
                     command.AddAlias( alias );
@@ -255,6 +258,27 @@ internal static class NCM
     internal static void Clear( ) {
         commands.Clear( );
         aliasMap.Clear( );
+    }
+    //
+    // Enqueue
+    //
+    internal static void Enqueue( string name, object args = null! ) {
+        commandQueue.Enqueue( ( ) => Execute( name, args ) );
+    }
+    //
+    // ProcessQueue
+    //
+    internal static void ProcessQueue( ) {
+        while ( commandQueue.Count > 0 ) {
+            var action = commandQueue.Dequeue( );
+            action( );
+        }
+    }
+    //
+    // ClearQueue
+    //
+    internal static void ClearQueue( ) {
+        commandQueue.Clear( );
     }
     //
     // Exists
@@ -414,6 +438,10 @@ internal static class UI
     // GetCommandsForControl
     //
     internal static IEnumerable<Control> GetAllControls( Control parent ) {
+        if ( parent == null ) { 
+            return Enumerable.Empty<Control>( );
+        }
+
         var controls = new List<Control>( );
 
         foreach ( Control child in parent.Controls ) {
@@ -523,8 +551,8 @@ internal class CMD_UIGeneric : COMMAND<UIActionArgs>
     }
 }
 
-// CMD_Generic
-internal class CMD_Generic : COMMAND<object>
+// CMD
+internal class CMD : COMMAND<object>
 {
     private readonly Action<object> genericAction;
     private readonly List<string> aliases = new( );
@@ -534,7 +562,7 @@ internal class CMD_Generic : COMMAND<object>
     public override string Description { get; }
     public override string Category { get; }
 
-    public CMD_Generic( string name, Action<object> action, string description = "", string category = "General" ) {
+    public CMD( string name, Action<object> action, string description = "", string category = "General" ) {
         Name = name;
         genericAction = ( action ?? (( args ) => { } ) );
         Description = string.IsNullOrEmpty( description ) ? $"Command: {name}" : description;
