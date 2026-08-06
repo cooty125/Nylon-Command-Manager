@@ -544,7 +544,7 @@ internal static class UI
         return Expression.Lambda( handlerType, body, sender, eventArgs ).Compile( );
     }
     static void executeBoundCommand( Control control, string commandName, object sender, EventArgs eventArgs ) {
-        NCM.Execute( commandName, sender ?? control );
+        NCM.Execute( commandName, eventArgs ?? EventArgs.Empty );
     }
 
     //
