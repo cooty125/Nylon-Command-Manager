@@ -12,8 +12,8 @@
  * ===============================================================
  */
 
-using System.Reflection;
 using System.Linq.Expressions;
+using System.Reflection;
 
 // ICOMMAND
 internal interface ICOMMAND
@@ -486,9 +486,13 @@ internal static class UI
         }
     }
     //
+    // GetForm
     // GetAllControls
     // GetCommandsForControl
     //
+    internal static T GetForm<T>( ) where T : Form {
+        return ( uiForm as T )!;
+    }
     internal static IEnumerable<Control> GetAllControls( Control parent ) {
         if ( parent == null ) { 
             return Enumerable.Empty<Control>( );
