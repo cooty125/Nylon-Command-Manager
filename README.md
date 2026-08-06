@@ -92,9 +92,7 @@ public Form1()
 [COMMAND("set_status", "Sets status bar text", "UI")]
 private static void StatusCommand(EventArgs args)
 {
-    var form = UI.Form as MainForm;
-    if (form == null) return;
-
+    var form = UI.GetForm<Form1>( );
     form.statusLabel.Text = "Clicked!";
 }
 ```
