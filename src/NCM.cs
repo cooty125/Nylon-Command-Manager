@@ -69,10 +69,38 @@ internal abstract class COMMAND<TARGS> : ICOMMAND
     }
 
     // TARGS
+    // ConvertValue
     // ConvertArguments
     // CreateFromDictionary
     // CreateFromAnonymous
     //
+    static object? convertValue( object? value, Type targetType ) {
+        if ( value == null ) {
+            if ( !targetType.IsValueType ||
+                Nullable.GetUnderlyingType( targetType ) != null ) {
+                return null;
+            }
+
+            throw new ArgumentException( $"Cannot assign null to '{targetType.Name}'." );
+        }
+
+        var nullableType = Nullable.GetUnderlyingType( targetType );
+        var actualType = nullableType ?? targetType;
+
+        if ( actualType.IsInstanceOfType( value ) ) {
+            return value;
+        }
+
+        if ( actualType.IsEnum ) {
+            return (
+                value is string text
+                ? Enum.Parse( actualType, text, true )
+                : Enum.ToObject( actualType, value )
+            );
+        }
+
+        return Convert.ChangeType( value, actualType );
+    }
     TARGS convertArguments( object arguments ) {
         if ( arguments is TARGS typed ) {
             return typed;
@@ -82,7 +110,7 @@ internal abstract class COMMAND<TARGS> : ICOMMAND
             return default( TARGS )!;
         }
 
-        if ( arguments is Dictionary<string, object> dict ) {
+        if ( arguments is IDictionary<string, object> dict ) {
             return createFromDictionary( dict );
         }
 
@@ -93,25 +121,33 @@ internal abstract class COMMAND<TARGS> : ICOMMAND
         try {
             return ( TARGS )Convert.ChangeType( arguments, typeof( TARGS ) );
         }
-        catch {
-            throw new ArgumentException( $"Cannot convert {arguments.GetType( ).Name} to {typeof( TARGS ).Name}" );
+        catch ( Exception exception ) {
+            throw new ArgumentException( $"Cannot convert {arguments.GetType( ).Name} " + $"to {typeof( TARGS ).Name}.", exception );
         }
     }
-    TARGS createFromDictionary( Dictionary<string, object> dictionary ) {
+    TARGS createFromDictionary( IDictionary<string, object> dictionary ) {
         var obj = Activator.CreateInstance<TARGS>( );
         var props = typeof( TARGS ).GetProperties( );
 
         foreach ( var prop in props ) {
-            if ( dictionary.TryGetValue( prop.Name, out var value ) ) {
-
-                if ( value != null && prop.PropertyType.IsInstanceOfType( value ) ) {
-                    prop.SetValue( obj, value );
-                }
-                else if ( value != null ) {
-                    var converted = Convert.ChangeType( value, prop.PropertyType );
-                    prop.SetValue( obj, converted );
-                }
+            if ( !prop.CanWrite ) {
+                continue;
             }
+
+            var item = dictionary.FirstOrDefault(
+                x => string.Equals(
+                    x.Key,
+                    prop.Name,
+                    StringComparison.OrdinalIgnoreCase
+                )
+            );
+
+            if ( item.Key == null ) {
+                continue;
+            }
+
+            var converted = convertValue( item.Value, prop.PropertyType );
+            prop.SetValue( obj, converted );
         }
 
         return obj;
@@ -133,7 +169,7 @@ internal static class NCM
     static bool initialized = false;
 
     static readonly Dictionary<string, ICOMMAND> commands = new Dictionary<string, ICOMMAND>( StringComparer.OrdinalIgnoreCase );
-    static readonly Dictionary<string, List<string>> aliasMap = new( );
+    static readonly Dictionary<string, List<string>> aliasMap = new( StringComparer.OrdinalIgnoreCase );
     static Queue<Action> commandQueue = new( );
 
     public static int QueueCount => commandQueue.Count;
@@ -198,13 +234,43 @@ internal static class NCM
         foreach ( var type in assembly.GetTypes( ) ) {
 
             foreach ( var method in type.GetMethods( BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public ) ) {
-
                 var attr = method.GetCustomAttribute<COMMANDAttribute>( );
                 if ( attr == null ) {
                     continue;
                 }
 
-                var action = ( Action<object> )Delegate.CreateDelegate( typeof( Action<object> ), method );
+                var parameters = method.GetParameters( );
+
+                if ( parameters.Length > 1 ) {
+                    throw new InvalidOperationException(
+                        $"Method '{method.DeclaringType?.FullName}.{method.Name}' " +
+                        "can have zero or one parameter."
+                    );
+                }
+
+                Action<object> action = args => {
+                    if ( parameters.Length == 0 ) {
+                        method.Invoke( null, null );
+                        return;
+                    }
+
+                    var parameterType = parameters[ 0 ].ParameterType;
+                    object? argument = args;
+
+                    if ( argument != null && !parameterType.IsInstanceOfType( argument ) ) {
+                        try {
+                            argument = Convert.ChangeType( argument, parameterType );
+                        }
+                        catch {
+                            if ( parameterType == typeof( string ) ) {
+                                argument = argument.ToString( );
+                            }
+                        }
+                    }
+
+                    method.Invoke( null, new[ ] { argument } );
+                };
+
                 var command = new CMD( attr.Name, action, attr.Description, attr.Category );
 
                 foreach ( var alias in attr.Aliases ) {
@@ -258,6 +324,8 @@ internal static class NCM
     internal static void Clear( ) {
         commands.Clear( );
         aliasMap.Clear( );
+
+        initialized = false;
     }
     //
     // Enqueue
@@ -282,7 +350,7 @@ internal static class NCM
     }
     //
     // Exists
-    // GetCagories
+    // GetCategories
     // GetByCategory
     // GetPrimaryName
     // GetAliases
@@ -305,30 +373,14 @@ internal static class NCM
     }
     internal static string GetPrimaryName( string nameOrAlias ) {
         if ( commands.TryGetValue( nameOrAlias, out var command ) ) {
-            foreach ( var kvp in commands ) {
-
-                if ( kvp.Value == command && !aliasMap.ContainsKey( kvp.Key ) ) {
-                    return kvp.Key;
-                }
-            }
-
             return command.Name;
         }
 
         return nameOrAlias;
     }
     internal static string[ ] GetAliases( string name ) {
-        if ( commands.TryGetValue( name, out var command ) ) {
-            foreach ( var kvp in commands ) {
-
-                if ( kvp.Value == command && !aliasMap.ContainsKey( kvp.Key ) ) {
-                    return (
-                        aliasMap.TryGetValue( kvp.Key, out var aliases )
-                        ? aliases.ToArray( )
-                        : Array.Empty<string>( )
-                    );
-                }
-            }
+        if ( commands.TryGetValue( name, out var command ) && aliasMap.TryGetValue( command.Name, out var aliases ) ) {
+            return aliases.ToArray( );
         }
 
         return Array.Empty<string>( );
@@ -426,7 +478,7 @@ internal static class UI
                 var cmdName = $"{prefix}{(string.IsNullOrEmpty( prefix ) ? "" : "_")}{control.Name}_{eventName}";
 
                 if ( !NCM.Exists( cmdName ) ) {
-                    NCM.Register( new CMD_UIGeneric( cmdName, ( args ) => { } ) );
+                    NCM.Register( new CMD( cmdName, ( args ) => { } ) );
                 }
 
                 Bind( control, eventName, cmdName );
@@ -492,10 +544,7 @@ internal static class UI
         return Expression.Lambda( handlerType, body, sender, eventArgs ).Compile( );
     }
     static void executeBoundCommand( Control control, string commandName, object sender, EventArgs eventArgs ) {
-        NCM.Execute( commandName, new UIActionArgs {
-            Sender = sender ?? control,
-            EventArgs = eventArgs ?? EventArgs.Empty
-        } );
+        NCM.Execute( commandName, sender ?? control );
     }
 
     //
@@ -503,51 +552,6 @@ internal static class UI
     //
     internal static void Close( ) {
         uiForm?.Close( );
-    }
-}
-
-// CMD_UIGeneric
-internal class UIActionArgs {
-    Dictionary<string, object> parameters = new( );
-
-    public object Sender { get; set; } = null!;
-    public EventArgs EventArgs { get; set; } = null!;
-
-    public T Get<T>( string key, T defaultValue = default! ) {
-        if ( parameters.TryGetValue( key, out var value ) && value is T typedValue ) {
-            return typedValue;
-        }
-
-        return defaultValue;
-    }
-    public object Get( string key ) {
-        return (parameters.TryGetValue( key, out var value ) ? value : null)!;
-    }
-    public void Set( string key, object value ) {
-        parameters[ key ] = value;
-    }
-    public bool Has( string key ) {
-        return parameters.ContainsKey( key );
-    }
-}
-internal class CMD_UIGeneric : COMMAND<UIActionArgs>
-{
-    readonly Action<UIActionArgs> uiAction;
-
-    public override string Name { get; }
-    public override string Description => $"UI Action: {Name}";
-    public override string Category => "UI";
-
-    public CMD_UIGeneric( string name, Action<UIActionArgs> action = null! ) {
-        Name = name;
-        uiAction = ( action ?? (( args ) => { }) );
-    }
-
-    public override void Execute( UIActionArgs arguments ) {
-        uiAction?.Invoke( arguments );
-    }
-    public override bool CanExecute( UIActionArgs args ) {
-        return true;
     }
 }
 
