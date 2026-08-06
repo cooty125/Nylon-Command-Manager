@@ -10,57 +10,58 @@ NCM is a lightweight, powerful command manager that brings Source Engine-style c
 
 - 🔌 **Command Registry** – Register commands with names, aliases, and categories
 - 🎯 **Typed Arguments** – Commands with strongly-typed arguments, supporting both classes and anonymous objects
+- 🏷️ **Attributes** – Define commands with `[COMMAND]` attribute for automatic registration
 - 🔄 **Automatic UI Binding** – Bind any WinForms event to commands with a single line of code
 - 🏷️ **Aliases** – Multiple names for the same command (e.g., `Build`, `b`, `make`)
 - 📂 **Categories** – Organize commands into logical groups
 - 🔍 **Case-Insensitive** – `Build` and `build` are the same command
 - 🧩 **Service Registry** – Built-in DI container for services
+- 📦 **Command Queue** – Optional async command queue for game loops and batching
 
 ---
 
 ## 🚀 Quick Start
 
-### 1. Define a Command
+### 1. Define a Command with Attribute
 
 ```csharp
-internal class CMD_Build : COMMAND<BuildArgs>
+[COMMAND("change_text", "Changes text in textBox1", "UI Test", "ct")]
+private static void ChangeTextCommand(object args)
 {
-    public override string Name => "Build";
-    public override string[] Aliases => new[] { "b", "make" };
-    public override string Description => "Builds all assets";
-    public override string Category => "Pipeline";
+    var form = UI.Form as Form1;
+    if (form == null) return;
 
-    public override void Execute(BuildArgs args)
+    if (args is UIActionArgs uiArgs && uiArgs.Sender is Button btn)
     {
-        // Build logic here
-        Console.WriteLine($"Building {args.Target}...");
+        form.textBox1.Text = $"Hello from {btn.Text}!";
     }
-}
-
-internal class BuildArgs
-{
-    public string Target { get; set; } = "Release";
-    public bool Verbose { get; set; } = false;
 }
 ```
 
-### 2. Register the Command
+### 2. Automatic Registration
 
 ```csharp
-NCM.Register(new CMD_Build());
+public Form1()
+{
+    InitializeComponent();
+    UI.Initialize(this);
+    
+    // Automatically registers all [COMMAND] methods
+    NCM.RegisterAttributes();
+    
+    // Automatic binding of all buttons
+    UI.BindAllButtons();
+}
 ```
 
 ### 3. Execute It
 
 ```csharp
-// With typed arguments
-NCM.Execute("Build", new BuildArgs { Target = "Debug", Verbose = true });
+// From anywhere
+NCM.Execute("change_text", new UIActionArgs { Sender = btn, EventArgs = e });
 
-// With anonymous object (auto-mapped!)
-NCM.Execute("Build", new { Target = "Debug", Verbose = true });
-
-// With dictionary
-NCM.Execute("Build", new Dictionary<string, object> { { "Target", "Debug" } });
+// With alias
+NCM.Execute("ct", new UIActionArgs { Sender = btn, EventArgs = e });
 
 // Without arguments
 NCM.Execute("Build");
@@ -73,30 +74,19 @@ NCM.Execute("Build");
 ### Automatic binding of all controls
 
 ```csharp
-public partial class MainForm : Form
+public Form1()
 {
-    public MainForm()
+    InitializeComponent();
+    UI.Initialize(this);
+    NCM.RegisterAttributes();
+
+    UI.Bind(btnBuild, "Click", "Build");
+
+    // Or manually
+    btnBuild.Click += (s, e) =>
     {
-        InitializeComponent();
-        
-        // Initialize UI
-        UI.Initialize(this);
-        
-        // Register commands
-        NCM.Register(new CMD_Build());
-        NCM.Register(new CMD_Refresh());
-        NCM.Register(new CMD_Save());
-        
-        // Bind all Click events to commands
-        UI.BindEventAt("Click");
-        
-        // Bind all TextChanged events
-        UI.BindEventAt("TextChanged");
-        
-        // Bind specific controls with filter
-        UI.BindEventAt("Click", 
-            c => c.Name.StartsWith("btn"));
-    }
+        NCM.Execute("Build", new UIActionArgs { Sender = s, EventArgs = e });
+    };
 }
 ```
 
@@ -110,64 +100,15 @@ UI.Bind(btnBuild, "Click", "Build");
 ### Access UI from commands
 
 ```csharp
-internal class CMD_Status : COMMAND<StatusArgs>
+[COMMAND("set_status", "Sets status bar text", "UI")]
+private static void StatusCommand(object args)
 {
-    public override string Name => "Status";
-    public override string Description => "Sets status bar text";
-    public override string Category => "UI";
+    var form = UI.Form as MainForm;
+    if (form == null) return;
 
-    public override void Execute(StatusArgs args)
+    if (args is UIActionArgs uiArgs)
     {
-        // Direct access to UI controls
-        var form = UI.Form as MainForm;
-        form.statusLabel.Text = args.Text;
-        form.statusLabel.ForeColor = args.IsError ? Color.Red : Color.White;
-    }
-}
-```
-
----
-
-## 📦 Services (Dependency Injection)
-
-```csharp
-// Register services
-SERVICES.Register(new AssetPipeline());
-SERVICES.Register(new BuildService());
-
-// Use them in commands
-internal class CMD_Build : COMMAND<BuildArgs>
-{
-    public override void Execute(BuildArgs args)
-    {
-        var pipeline = SERVICES.Get<AssetPipeline>();
-        var build = SERVICES.Get<BuildService>();
-        
-        // Use services...
-    }
-}
-```
-
----
-
-## 🔧 Advanced
-
-### Event binding with context
-
-```csharp
-// When binding events, the command receives UIActionArgs
-internal class CMD_SelectAsset : COMMAND<UIActionArgs>
-{
-    public override string Name => "SelectAsset";
-    public override string Category => "Assets";
-
-    public override void Execute(UIActionArgs args)
-    {
-        if (args.EventArgs is TreeViewEventArgs treeArgs)
-        {
-            var node = treeArgs.Node;
-            // Handle selection...
-        }
+        form.statusLabel.Text = "Hello!";
     }
 }
 ```
@@ -184,25 +125,93 @@ NCM.Register(new CMD_UIGeneric("MyAction", (args) =>
 }));
 ```
 
+## 📦 Services (Dependency Injection)
+
+```csharp
+// Register services
+SERVICES.Register(new AssetPipeline());
+SERVICES.Register(new BuildService());
+
+// Use them in commands
+[COMMAND("build", "Builds all assets", "Pipeline", "b")]
+private static void BuildCommand(object args)
+{
+    var pipeline = SERVICES.Get<AssetPipeline>();
+    var build = SERVICES.Get<BuildService>();
+    
+    // Use services...
+}
+```
+
 ---
+
+## 🔧 Command Queue (Async / Game Loop)
+
+### Event binding with context
+
+```csharp
+// Add commands to queue (they won't execute immediately)
+NCM.Enqueue("Build");
+NCM.Enqueue("Refresh");
+NCM.Enqueue("Export");
+
+// Process all commands in queue
+NCM.ProcessQueue();
+```
+
+### Automatic queue processing in game loop
+
+```csharp
+// In your game loop
+while (running)
+{
+    NCM.ProcessQueue();  // Process queued commands every frame
+    Update();
+    Render();
+}
+```
+
+### UI integration
+
+```csharp
+// Process queue on UI idle
+Application.Idle += (s, e) => NCM.ProcessQueue();
+
+```
 
 ## 🧪 Example Commands
 
 ```csharp
 // System commands
-NCM.Register(new CMD_Help());      // Lists all commands
-NCM.Register(new CMD_Clear());     // Clears console
-NCM.Register(new CMD_Exit());      // Exits application
+[COMMAND("help", "Shows all available commands", "System")]
+private static void HelpCommand(object args)
+{
+    var sb = new StringBuilder();
+    sb.AppendLine("Available commands:");
+    foreach (var category in NCM.GetCategories())
+    {
+        sb.AppendLine($"  [{category}]");
+        foreach (var cmd in NCM.GetByCategory(category))
+        {
+            var aliases = NCM.GetAliases(cmd.Name);
+            var aliasText = aliases.Length > 0 ? $" (aliases: {string.Join(", ", aliases)})" : "";
+            sb.AppendLine($"    {cmd.Name,-20} - {cmd.Description}{aliasText}");
+        }
+    }
+    Console.WriteLine(sb.ToString());
+}
 
-// Project commands
-NCM.Register(new CMD_OpenProject());
-NCM.Register(new CMD_SaveProject());
-NCM.Register(new CMD_CloseProject());
+[COMMAND("clear", "Clears the console", "System")]
+private static void ClearCommand(object args)
+{
+    Console.Clear();
+}
 
-// Build commands
-NCM.Register(new CMD_Build());
-NCM.Register(new CMD_Clean());
-NCM.Register(new CMD_Rebuild());
+[COMMAND("exit", "Exits the application", "System")]
+private static void ExitCommand(object args)
+{
+    Application.Exit();
+}
 ```
 
 ---
