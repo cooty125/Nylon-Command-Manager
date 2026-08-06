@@ -1,4 +1,4 @@
-﻿/* 
+/* 
  * NCM
  * ===============================================================
  * FileName: NCM.cs
@@ -130,11 +130,15 @@ internal abstract class COMMAND<TARGS> : ICOMMAND
 // NCM
 internal static class NCM
 {
+    static bool initialized = false;
+
     static readonly Dictionary<string, ICOMMAND> commands = new Dictionary<string, ICOMMAND>( StringComparer.OrdinalIgnoreCase );
     static readonly Dictionary<string, List<string>> aliasMap = new( );
 
     //
     // Register
+    // RegisterAttributes
+    // RegisterAssembly
     //
     internal static void Register<TARGS>( COMMAND<TARGS> command ) {
         if ( string.IsNullOrWhiteSpace( command.Name ) ) {
@@ -174,6 +178,38 @@ internal static class NCM
 
         if ( aliases.Length > 0 ) {
             aliasMap[ command.Name ] = aliases.ToList( );
+        }
+    }
+    internal static void RegisterAttributes( ) {
+        if ( initialized ) {
+            return;
+        }
+
+        initialized = true;
+
+        foreach ( var assembly in AppDomain.CurrentDomain.GetAssemblies( ) ) {
+            RegisterAssembly( assembly );
+        }
+    }
+    internal static void RegisterAssembly( Assembly assembly ) {
+        foreach ( var type in assembly.GetTypes( ) ) {
+
+            foreach ( var method in type.GetMethods( BindingFlags.Static | BindingFlags.NonPublic | BindingFlags.Public ) ) {
+
+                var attr = method.GetCustomAttribute<COMMANDAttribute>( );
+                if ( attr == null ) {
+                    continue;
+                }
+
+                var action = ( Action<object> )Delegate.CreateDelegate( typeof( Action<object> ), method );
+                var command = new CMD_Generic( attr.Name, action, attr.Description, attr.Category );
+
+                foreach ( var alias in attr.Aliases ) {
+                    command.AddAlias( alias );
+                }
+
+                Register( command );
+            }
         }
     }
     //
@@ -442,7 +478,7 @@ internal static class UI
     }
 }
 
-// CMD_UIAction
+// CMD_UIGeneric
 internal class UIActionArgs {
     Dictionary<string, object> parameters = new( );
 
@@ -484,5 +520,50 @@ internal class CMD_UIGeneric : COMMAND<UIActionArgs>
     }
     public override bool CanExecute( UIActionArgs args ) {
         return true;
+    }
+}
+
+// CMD_Generic
+internal class CMD_Generic : COMMAND<object>
+{
+    private readonly Action<object> genericAction;
+    private readonly List<string> aliases = new( );
+
+    public override string Name { get; }
+    public override string[ ] Aliases => aliases.ToArray( );
+    public override string Description { get; }
+    public override string Category { get; }
+
+    public CMD_Generic( string name, Action<object> action, string description = "", string category = "General" ) {
+        Name = name;
+        genericAction = ( action ?? (( args ) => { } ) );
+        Description = string.IsNullOrEmpty( description ) ? $"Command: {name}" : description;
+        Category = category;
+    }
+
+    public override void Execute( object args ) {
+        genericAction?.Invoke( args );
+    }
+
+    public void AddAlias( string alias ) {
+        if ( !string.IsNullOrEmpty( alias ) && !aliases.Contains( alias ) ) {
+            aliases.Add( alias );
+        }
+    }
+}
+
+[AttributeUsage( AttributeTargets.Method, AllowMultiple = false )]
+internal class COMMANDAttribute : Attribute
+{
+    public string Name { get; }
+    public string Description { get; }
+    public string[ ] Aliases { get; }
+    public string Category { get; }
+
+    public COMMANDAttribute( string name, string description = "", string category = "General", params string[ ] aliases ) {
+        Name = name;
+        Description = description;
+        Category = category;
+        Aliases = ( aliases ?? Array.Empty<string>( ) );
     }
 }
