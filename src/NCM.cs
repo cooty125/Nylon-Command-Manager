@@ -444,8 +444,27 @@ internal static class UI
 
 // CMD_UIAction
 internal class UIActionArgs {
+    Dictionary<string, object> parameters = new( );
+
     public object Sender { get; set; } = null!;
     public EventArgs EventArgs { get; set; } = null!;
+
+    public T Get<T>( string key, T defaultValue = default! ) {
+        if ( parameters.TryGetValue( key, out var value ) && value is T typedValue ) {
+            return typedValue;
+        }
+
+        return defaultValue;
+    }
+    public object Get( string key ) {
+        return (parameters.TryGetValue( key, out var value ) ? value : null)!;
+    }
+    public void Set( string key, object value ) {
+        parameters[ key ] = value;
+    }
+    public bool Has( string key ) {
+        return parameters.ContainsKey( key );
+    }
 }
 internal class CMD_UIAction : COMMAND<UIActionArgs>
 {
