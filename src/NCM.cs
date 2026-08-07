@@ -1,15 +1,17 @@
 /* 
  * NCM
- * ===============================================================
+ * ===================================================================
  * FileName: NCM.cs
  * Project: Nylon Command Manager
  * Location: ./
- * ---------------------------------------------------------------
- * Description: Nylon generic command manager
- * ---------------------------------------------------------------
- * This document is distributed under GNU General Public License.
+ * -------------------------------------------------------------------
+ * Description: Nylon generic command manager (API)
+ * -------------------------------------------------------------------
+ * This document is provided under LGPL Lesser General Public License.
  * Copyright © David Kutnar 2026 - All rights reserved.
- * ===============================================================
+ * -------------------------------------------------------------------
+ * GitHub: https://github.com/cooty125/Nylon-Command-Manager
+ * ===================================================================
  */
 
 using System.Linq.Expressions;
