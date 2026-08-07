@@ -405,6 +405,7 @@ internal static class SERVICES
     // Get
     // Has
     // Clear
+    // ClearAll
     //
     internal static T Get<T>( ) where T : class {
         if ( services.TryGetValue( typeof( T ), out var service ) ) {
@@ -416,7 +417,10 @@ internal static class SERVICES
     internal static bool Has<T>( ) where T : class {
         return services.ContainsKey( typeof( T ) );
     }
-    internal static void Clear( ) {
+    internal static void Clear<T>( ) where T : class {
+        services.Remove( typeof( T ) );
+    }
+    internal static void ClearAll( ) {
         services.Clear( );
     }
 }
